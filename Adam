@@ -45,6 +45,7 @@ needed = scalar()
 output_sum = scalar()
 loss = scalar()
 learning_rate = scalar()
+power = scalar()
 
 # Data layout configuration, for fast computation
 @ti.layout
@@ -152,8 +153,8 @@ def gd_layer1():
             g = weights1.grad[i, j] 
             m_1[j] = beta1*m_1[j] + (1-beta1)*g
             v_1[j] = beta2*v_1[j] + (1-beta2)*g*g
-            m_hat = m_1[j]/(1- pow(beta1, i+1) )
-            v_hat = v_1[j]/(1- pow(beta2, i+1) )
+            m_hat = m_1[j]/(1- pow(beta1, power[None]) )
+            v_hat = v_1[j]/(1- pow(beta2, power[None]) )
             dthetha1 = learning_rate/np.sqrt(v_hat + eps)*m_hat
             weights1[i, j] -= dthetha1
             
@@ -164,8 +165,8 @@ def gd_layer2():
             g = weights2.grad[i, j]
             m_2[j] = beta1*m_2[j] + (1-beta1)*g
             v_2[j] = beta2*v_2[j] + (1-beta2)*g*g
-            m_hat = m_2[j]/(1- pow(beta1, i+1) )
-            v_hat = v_2[j]/(1- pow(beta2, i+1) )
+            m_hat = m_2[j]/(1- pow(beta1, power[None]) )
+            v_hat = v_2[j]/(1- pow(beta2, power[None]) )
             dthetha2 = learning_rate/np.sqrt(v_hat + eps)*m_hat
             weights2[i, j] -= dthetha2
             
@@ -235,6 +236,7 @@ def main():
             clear_all()
             output_sum[None] = 0
             loss[None] = 0
+            power[None] = i
 
             forward()
 
@@ -259,3 +261,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
