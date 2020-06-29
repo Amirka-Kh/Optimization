@@ -48,6 +48,10 @@ needed = scalar()
 output_sum = scalar()
 loss = scalar()
 learning_rate = scalar()
+N_sma_max = scalar()
+N_sma = scalar()
+power = scalar()
+rect_term = scalar()
 
 
 # Data layout configuration, for fast computation
@@ -68,6 +72,10 @@ def place():
     ti.root.place(output_sum)
     ti.root.place(loss)
     ti.root.place(learning_rate)
+    ti.root.place(N_sma_max)
+    ti.root.place(N_sma)
+    ti.root.place(power)
+    ti.root.place(rect_term)
 
     # Add gradient variables
     ti.root.lazy_grad()
@@ -150,7 +158,7 @@ def compute_loss():
         loss[None] += (-needed[i]) * ti.log(output2_norm[i])
 
 
-# Gradient descent, ADAM approach
+# Gradient descent, RAdam approach
 @ti.kernel
 def gd_layer1():
     for i in range(n_pixels):
@@ -159,9 +167,8 @@ def gd_layer1():
             g = weights1.grad[i, j]
             m_1[index] = beta1 * m_1[index] + (1 - beta1) * g
             v_1[index] = beta2 * v_1[index] + (1 - beta2) * g * g
-            m_hat = m_1[index] / (1 - pow(beta1, i + 1))
-            v_hat = v_1[index] / (1 - pow(beta2, i + 1))
-            dthetha1 = learning_rate / np.sqrt(v_hat + eps) * m_hat
+            m_hat = m_1[index] / (1 - pow(beta1, power[None]))
+            dthetha1 = learning_rate * m_hat
             weights1[i, j] -= dthetha1
 
 
@@ -173,10 +180,36 @@ def gd_layer2():
             index = n_hidden*i + j
             m_2[index] = beta1 * m_2[index] + (1 - beta1) * g
             v_2[index] = beta2 * v_2[index] + (1 - beta2) * g * g
-            m_hat = m_2[index] / (1 - pow(beta1, i + 1))
-            v_hat = v_2[index] / (1 - pow(beta2, i + 1))
-            dthetha2 = learning_rate / np.sqrt(v_hat + eps) * m_hat
+            m_hat = m_2[index] / (1 - pow(beta1, power[None]))
+            dthetha2 = learning_rate * m_hat
             weights2[i, j] -= dthetha2
+
+@ti.kernel
+def gdz_layer1():
+    for i in range(n_pixels):
+        for j in range(n_hidden):
+            index = n_hidden*i + j
+            g = weights1.grad[i, j]
+            m_1[index] = beta1 * m_1[index] + (1 - beta1) * g
+            v_1[index] = beta2 * v_1[index] + (1 - beta2) * g * g
+            m_hat = m_1[index] / (1 - pow(beta1, power[None]))
+            v_hat = np.sqrt(v_1[index] / (1 - pow(beta2, power[None])))
+            dthetha1 = learning_rate / v_hat * m_hat * rect_term[None]
+            weights1[i, j] -= dthetha1
+
+@ti.kernel
+def gdz_layer2():
+    for i in range(n_hidden):
+        for j in range(n_numbers):
+            g = weights2.grad[i, j]
+            index = n_hidden*i + j
+            m_2[index] = beta1 * m_2[index] + (1 - beta1) * g
+            v_2[index] = beta2 * v_2[index] + (1 - beta2) * g * g
+            m_hat = m_2[index] / (1 - pow(beta1, power[None]))
+            v_hat = np.sqrt(v_2[index] / (1 - pow(beta2, power[None])))
+            dthetha2 = learning_rate / v_hat * m_hat * rect_term[None]
+            weights2[i, j] -= dthetha2
+   
 
 
 # Step forward through network
@@ -238,9 +271,14 @@ def test_accuracy():
 def main():
     losses = []
     accuracies = []
+    decay[None] = 0
+    learning_rate[None] = 0.001
+    weight_decay[None] = 0.0
+    initial_decay = 0
     for n in range(training_epochs):
         for i in range(len(train_images)):
-            learning_rate[None] = 5e-3 * (0.1 ** (2 * i // 60000))
+            if initial_decay > 0:
+                learning_rate[None] = learning_rate[None]*(1. / (1. + decay[None]*float(i))
 
             for j in range(image_size):
                 for k in range(image_size):
@@ -252,6 +290,7 @@ def main():
             clear_weights_biases_grad()
             output_sum[None] = 0
             loss[None] = 0
+            power[None] = i
 
             forward()
 
@@ -269,9 +308,23 @@ def main():
             output_sum.grad[None] = 0
 
             backward_grad()
-
-            gd_layer1()
-            gd_layer2()
+            
+            beta2_i = beta2 ** i
+            N_sma_max[None] = 2 / (1 - beta2) - 1 
+            N_sma[None] = N_sma_max[None] - 2 * i * beta2_i / (1 - beta2_i)
+            
+            N_m = N_sma
+            N_max = N_sma_max
+            
+            if i % 5 == 0:
+                rect_term[None] = math.sqrt((N_m - 4) / N_max - 4) * (N_m - 2) / N_m * N_max / (N_max - 2)) 
+                gdz_layer1()
+                gdz_layer2()
+            else:
+                gd_layer1()
+                gd_layer2()
+                
+                
 
 
 if __name__ == '__main__':
