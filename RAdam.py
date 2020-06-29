@@ -20,8 +20,7 @@ image_size = 28
 # Hiden nodes
 n_hidden = 500
 
-# Epsilon and Betas
-eps = 1e-6
+# Betas
 beta1 = 0.9
 beta2 = 0.99
 
