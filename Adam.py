@@ -1,5 +1,11 @@
 import taichi as ti
-import mnist
+import numpy as np
+import tensorflow
+from tensorboardX import SummaryWriter
+
+#import mnist
+from tensorflow.keras.datasets import mnist
+
 
 # Initialization
 ti.init(arch=ti.gpu, defaul_fp=ti.f32)
