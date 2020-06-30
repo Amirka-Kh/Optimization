@@ -47,8 +47,6 @@ needed = scalar()
 output_sum = scalar()
 loss = scalar()
 learning_rate = scalar()
-N_sma_max = scalar()
-N_sma = scalar()
 power = scalar()
 rect_term = scalar()
 
@@ -71,8 +69,6 @@ def place():
     ti.root.place(output_sum)
     ti.root.place(loss)
     ti.root.place(learning_rate)
-    ti.root.place(N_sma_max)
-    ti.root.place(N_sma)
     ti.root.place(power)
     ti.root.place(rect_term)
 
@@ -86,15 +82,17 @@ def init_weights_biases():
     # Layer 1
     for i in range(n_pixels):
         for j in range(n_hidden):
-            m_1[j] = 0
-            v_1[j] = 0
+            index = n_hidden * i + j
+            m_1[index] = 0.0
+            v_1[index] = 0.0
             weights1[i, j] = ti.random() * 0.005
 
     # Layer 2
     for i in range(n_hidden):
         for j in range(n_numbers):
-            m_2[j] = 0
-            v_2[j] = 0
+            index = n_numbers * i + j
+            m_2[index] = 0.0
+            v_2[index] = 0.0
             weights2[i, j] = ti.random() * 0.005
 
 
@@ -104,24 +102,26 @@ def clear_all():
     # Layer 1
     for i in range(n_pixels):
         for j in range(n_hidden):
+            index = n_hidden * i + j
             output1[j] = 0
             output1.grad[j] = 0
             weights1.grad[i, j] = 0
-            m_1[j] = 0
-            v_1[j] = 0
+            m_1[index] = 0.0
+            v_1[index] = 0.0
 
     # Layer 2
     for i in range(n_hidden):
         for j in range(n_numbers):
-            weights2.grad[i, j] = 0
-            m_2[j] = 0
-            v_2[j] = 0
+            index = n_numbers * i + j
             output2[j] = 0
             output2.grad[j] = 0
             output2_exp[j] = 0
             output2_exp.grad[j] = 0
             output2_norm[j] = 0
             output2_norm.grad[j] = 0
+            weights2.grad[i, j] = 0
+            m_2[index] = 0.0
+            v_2[index] = 0.0
 
 
 # Compute layers
@@ -192,7 +192,7 @@ def gdz_layer1():
             m_1[index] = beta1 * m_1[index] + (1 - beta1) * g
             v_1[index] = beta2 * v_1[index] + (1 - beta2) * g * g
             m_hat = m_1[index] / (1 - pow(beta1, power[None]))
-            v_hat = np.sqrt(v_1[index] / (1 - pow(beta2, power[None])))
+            v_hat = ti.sqrt(v_1[index] / (1 - pow(beta2, power[None])))
             dthetha1 = learning_rate / v_hat * m_hat * rect_term[None]
             weights1[i, j] -= dthetha1
 
@@ -205,7 +205,7 @@ def gdz_layer2():
             m_2[index] = beta1 * m_2[index] + (1 - beta1) * g
             v_2[index] = beta2 * v_2[index] + (1 - beta2) * g * g
             m_hat = m_2[index] / (1 - pow(beta1, power[None]))
-            v_hat = np.sqrt(v_2[index] / (1 - pow(beta2, power[None])))
+            v_hat = ti.sqrt(v_2[index] / (1 - pow(beta2, power[None])))
             dthetha2 = learning_rate / v_hat * m_hat * rect_term[None]
             weights2[i, j] -= dthetha2
    
@@ -285,8 +285,7 @@ def main():
             for j in range(n_numbers):
                 needed[j] = int(train_label[i][j] == j)
 
-            clear_outputs_grad()
-            clear_weights_biases_grad()
+            clear_all()
             output_sum[None] = 0
             loss[None] = 0
             power[None] = i
@@ -309,12 +308,9 @@ def main():
             backward_grad()
             
             beta2_i = beta2 ** i
-            N_sma_max[None] = 2 / (1 - beta2) - 1 
-            N_sma[None] = N_sma_max[None] - 2 * i * beta2_i / (1 - beta2_i)
-            
-            N_m = N_sma
-            N_max = N_sma_max
-            
+            N_max = 2 / (1 - beta2) - 1 
+            N_m = N_max - 2 * i * beta2_i / (1 - beta2_i)
+         
             if i % 5 == 0:
                 rect_term[None] = math.sqrt((N_m - 4) / N_max - 4) * (N_m - 2) / N_m * N_max / (N_max - 2)) 
                 gdz_layer1()
