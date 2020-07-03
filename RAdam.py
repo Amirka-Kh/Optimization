@@ -4,7 +4,7 @@ import numpy as np
 from tensorflow.keras.datasets import mnist
 
 # Initialization
-ti.init(arch=ti.gpu, defaul_fp=ti.f32)
+ti.init(arch=ti.gpu)
 
 # Data type shortcuts
 real = ti.f32
@@ -98,31 +98,35 @@ def init_weights_biases():
 
 # Clear gradients and outputs
 @ti.kernel
-def clear_all():
+def clear_outputs_grad():
     # Layer 1
     for i in range(n_pixels):
         for j in range(n_hidden):
-            index = n_hidden * i + j
             output1[j] = 0
             output1.grad[j] = 0
-            weights1.grad[i, j] = 0
-            m_1[index] = 0.0
-            v_1[index] = 0.0
+
 
     # Layer 2
     for i in range(n_hidden):
         for j in range(n_numbers):
-            index = n_numbers * i + j
             output2[j] = 0
             output2.grad[j] = 0
             output2_exp[j] = 0
             output2_exp.grad[j] = 0
             output2_norm[j] = 0
             output2_norm.grad[j] = 0
-            weights2.grad[i, j] = 0
-            m_2[index] = 0.0
-            v_2[index] = 0.0
 
+
+@ti.kernel
+def clear_weights_biases_grad():
+    for i in range(n_pixels):
+        for j in range(n_hidden):
+            weights1.grad[i, j] = 0
+
+    for i in range(n_hidden):
+        for j in range(n_numbers):
+            weights2.grad[i, j] = 0
+            
 
 # Compute layers
 @ti.kernel
@@ -251,7 +255,8 @@ def test_accuracy():
         for j in range(n_numbers):
             needed[j] = int(test_label[i] == j) 
 
-        clear_all()
+        clear_outputs_grad()
+        clear_weights_biases_grad()
         loss[None] = 0
 
         forword()
@@ -285,7 +290,9 @@ def main():
             for j in range(n_numbers):
                 needed[j] = int(train_label[i][j] == j)
 
-            clear_all()
+            
+            clear_outputs_grad()
+            clear_weights_biases_grad()
             output_sum[None] = 0
             loss[None] = 0
             power[None] = i
